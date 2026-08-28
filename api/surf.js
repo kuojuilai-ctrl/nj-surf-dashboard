@@ -1,11 +1,10 @@
 module.exports = async (req, res) => {
-    // 允許跨網域
     res.setHeader('Access-Control-Allow-Origin', '*');
     
     const spotId = req.query.spotId || '5842041f4e65fad6a7708856';
     
-    // 【關鍵修正】：改用 reports (即時報告) 端點，不使用 forecasts，避開所有參數 400 錯誤
-    const surflineUrl = `https://services.surfline.com/kbyg/spots/reports?spotId=${spotId}`;
+    // 拔除所有多餘的參數 (days, intervalHours)，避免觸發 400 錯誤。直接存取最單純的預報節點。
+    const surflineUrl = `https://services.surfline.com/kbyg/spots/forecasts/wave?spotId=${spotId}`;
 
     try {
         const response = await fetch(surflineUrl, {
@@ -16,16 +15,13 @@ module.exports = async (req, res) => {
         });
 
         if (!response.ok) {
-            const errBody = await response.text();
             return res.status(response.status).json({ 
-                error: `Surfline API 錯誤 (${response.status})`,
-                details: errBody 
+                error: `Surfline API 錯誤 (${response.status})`
             });
         }
 
         const data = await response.json();
-        // 加上快取機制，避免頻繁重整被 Surfline 封鎖
-        res.setHeader('Cache-Control', 's-maxage=180');
+        res.setHeader('Cache-Control', 's-maxage=120'); // 減少快取時間以獲取最新資料
         return res.status(200).json(data);
     } catch (err) {
         return res.status(500).json({ error: err.message });
