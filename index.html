@@ -12,29 +12,30 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <!-- 區塊 1：即時影像 (修復點擊與黑屏) -->
+        <!-- 區塊 1：即時影像 (絕對像素裁切法 - 保證可點擊) -->
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
             <h2 class="text-xl font-semibold mb-3 flex items-center justify-between">
                 <span>📷 即時影像 (Manasquan Inlet)</span>
-                <button onclick="toggleFullScreen()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1 rounded transition">⛶ 全螢幕</button>
             </h2>
             
-            <div id="cam-wrapper" class="relative w-full bg-black rounded overflow-hidden" style="padding-top: 56.25%;">
+            <!-- 觀景窗：固定高度，超出隱藏 -->
+            <div style="position: relative; width: 100%; height: 380px; overflow: hidden; background: #000; border-radius: 8px;">
+                <!-- 
+                    將 iframe 設為超大固定尺寸 (1200px) 並往左上推移。
+                    因為沒有使用 scale 縮放，瀏覽器的點擊座標完全不會跑掉！
+                -->
                 <iframe src="https://njbeachcams.com/central-new-jersey/manasquan-inlet-cam/"
-                        class="absolute border-none"
-                        style="top: -380px; left: -20px; width: 105%; height: 1200px;"
-                        scrolling="no" 
-                        allow="autoplay; fullscreen"
-                        allowfullscreen>
+                        style="position: absolute; width: 1200px; height: 1000px; top: -380px; left: -140px; border: none;"
+                        scrolling="no">
                 </iframe>
             </div>
-            <p class="text-xs text-gray-500 mt-2">載入後直接點擊畫面中央播放即可。</p>
+            <p class="text-xs text-gray-500 mt-2">註：已修復點擊失效問題。請直接點擊畫面中央播放。</p>
         </div>
 
         <!-- 區塊 2：Windy -->
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
             <h2 class="text-xl font-semibold mb-3">🗺️ Windy 浪況與風場預測</h2>
-            <div class="relative w-full bg-gray-700 rounded overflow-hidden" style="padding-top: 56.25%;">
+            <div class="relative w-full bg-gray-700 rounded overflow-hidden" style="height: 380px;">
                 <iframe class="absolute top-0 left-0 w-full h-full border-none" 
                     src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=11&overlay=waves&product=ecmwf&lat=40.103&lon=-74.032&detailLat=40.103&detailLon=-74.032&detail=true" 
                     allowfullscreen>
@@ -53,51 +54,45 @@
     </div>
 
     <script>
-        function toggleFullScreen() {
-            const el = document.getElementById("cam-wrapper");
-            if (!document.fullscreenElement) {
-                if (el.requestFullscreen) el.requestFullscreen();
-            } else {
-                if (document.exitFullscreen) document.exitFullscreen();
-            }
-        }
-
         const spotId = "5842041f4e65fad6a7708856";
         
         fetch(`/api/surf?spotId=${spotId}`)
             .then(async response => {
                 if (!response.ok) {
-                    const errText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                    const errJson = await response.json();
+                    throw new Error(errJson.error || `HTTP ${response.status}`);
                 }
                 return response.json();
             })
             .then(data => {
-                const waveList = data?.data?.wave;
-                if (!waveList || waveList.length === 0) {
-                    throw new Error("回傳資料格式不符合預期");
+                // 配合新的 Reports API 結構提取資料
+                const report = data?.data?.report;
+                if (!report) {
+                    throw new Error("回傳資料為空或結構已變更");
                 }
-                const currentWave = waveList[0];
-                const swell = currentWave.swells?.[0] || { height: '--', period: '--', direction: '--' };
+                
+                const wave = report.wave || {};
+                const swells = report.swells || [];
+                const primarySwell = swells[0] || { height: '--', period: '--', direction: '--' };
 
                 document.getElementById('surfline-data').innerHTML = `
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center w-full">
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
-                            <div class="text-gray-400 mb-1 text-xs">預報浪高</div>
-                            <div class="text-2xl font-bold text-blue-400">${currentWave.surf?.min ?? '-'} - ${currentWave.surf?.max ?? '-'} <span class="text-xs text-gray-400">ft</span></div>
+                            <div class="text-gray-400 mb-1 text-xs">目前實測浪高</div>
+                            <div class="text-2xl font-bold text-blue-400">${wave.min ?? '-'} - ${wave.max ?? '-'} <span class="text-xs text-gray-400">ft</span></div>
                         </div>
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
                             <div class="text-gray-400 mb-1 text-xs">主要湧浪 (Swell)</div>
-                            <div class="text-base font-semibold text-white">${swell.height}ft @ ${swell.period}s</div>
-                            <div class="text-xs text-gray-400">方向: ${swell.direction}°</div>
+                            <div class="text-base font-semibold text-white">${primarySwell.height}ft @ ${primarySwell.period}s</div>
+                            <div class="text-xs text-gray-400">方向: ${primarySwell.direction}°</div>
                         </div>
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
                             <div class="text-gray-400 mb-1 text-xs">浪況評級</div>
-                            <div class="text-base font-semibold text-yellow-400">${currentWave.surf?.humanRelation || '一般'}</div>
+                            <div class="text-base font-semibold text-yellow-400">${wave.humanRelation || '一般'}</div>
                         </div>
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
-                            <div class="text-gray-400 mb-1 text-xs">建議狀態</div>
-                            <div class="text-base font-semibold text-white">${currentWave.surf?.optimalScore ? '適合下水' : '普通'}</div>
+                            <div class="text-gray-400 mb-1 text-xs">測站更新時間</div>
+                            <div class="text-base font-semibold text-white">${new Date(report.timestamp * 1000).toLocaleTimeString('zh-TW', {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
                     </div>
                 `;
