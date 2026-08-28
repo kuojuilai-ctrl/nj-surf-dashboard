@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NJ Surf Dashboard - Vercel 整合版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white p-6">
+
+    <h1 class="text-3xl font-bold mb-6 text-blue-400">🌊 NJ Surf Dashboard (Manasquan Vercel 測試)</h1>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        <!-- 區塊 1：即時影像 (改用 Scale 放大鏡強制裁切法) -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-3 flex items-center justify-between">
+                <span>📷 即時影像 (Manasquan Inlet)</span>
+                <button onclick="toggleFullScreen()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs px-3 py-1 rounded transition">⛶ 全螢幕</button>
+            </h2>
+            
+            <div id="cam-wrapper" class="relative w-full bg-black rounded overflow-hidden" style="padding-top: 56.25%;">
+                <!-- 使用 scale(1.8) 強制放大 1.8 倍，並透過 translateY 往上移來隱藏標題 -->
+                <iframe src="https://njbeachcams.com/central-new-jersey/manasquan-inlet-cam/"
+                        class="absolute top-0 left-0 w-full h-full border-none"
+                        style="transform: scale(1.8) translateY(-12%); transform-origin: center top;"
+                        scrolling="no" 
+                        allowfullscreen>
+                </iframe>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">註：全螢幕後若需微調，可修改程式碼中的 scale 數值。</p>
+        </div>
+
+        <!-- 區塊 2：Windy -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-3">🗺️ Windy 浪況與風場預測</h2>
+            <div class="relative w-full bg-gray-700 rounded overflow-hidden" style="padding-top: 56.25%;">
+                <iframe class="absolute top-0 left-0 w-full h-full border-none" 
+                    src="https://embed.windy.com/embed.html?type=map&location=coordinates&metricRain=default&metricTemp=default&metricWind=default&zoom=11&overlay=waves&product=ecmwf&lat=40.103&lon=-74.032&detailLat=40.103&detailLon=-74.032&detail=true" 
+                    allowfullscreen>
+                </iframe>
+            </div>
+        </div>
+
+        <!-- 區塊 3：Surfline (已連接你的 Vercel API) -->
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg lg:col-span-2">
+            <h2 class="text-xl font-semibold mb-3">📊 Surfline 即時數值解析</h2>
+            <div id="surfline-data" class="bg-gray-900 p-4 rounded font-mono text-sm text-green-400 min-h-[100px] flex items-center justify-center">
+                正在呼叫 Vercel 後端抓取數據...
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function toggleFullScreen() {
+            const camWrapper = document.getElementById("cam-wrapper");
+            if (!document.fullscreenElement) {
+                if (camWrapper.requestFullscreen) camWrapper.requestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+            }
+        }
+
+        const spotId = "5842041f4e65fad6a7708856"; 
+        
+        // 這裡不再使用公共代理，而是直接呼叫我們自己的 Vercel Serverless Function
+        const apiUrl = `/api/surf?spotId=${spotId}`;
+
+        fetch(apiUrl)
+            .then(response => {
+                if (!response.ok) throw new Error("Vercel API 連線失敗");
+                return response.json();
+            })
+            .then(data => {
+                const currentWave = data.data.wave[0];
+                document.getElementById('surfline-data').innerHTML = `
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center w-full">
+                        <div class="bg-gray-800 p-3 rounded border border-gray-700">
+                            <div class="text-gray-400 mb-1">預報浪高</div>
+                            <div class="text-2xl font-bold text-blue-400">${currentWave.surf.min} - ${currentWave.surf.max} <span class="text-sm text-gray-500">ft</span></div>
+                        </div>
+                        <div class="bg-gray-800 p-3 rounded border border-gray-700">
+                            <div class="text-gray-400 mb-1">主要湧浪 (Swell)</div>
+                            <div class="text-lg text-white">${currentWave.swells[0].height}ft @ ${currentWave.swells[0].period}s</div>
+                            <div class="text-xs text-gray-500">方向: ${currentWave.swells[0].direction}°</div>
+                        </div>
+                        <div class="bg-gray-800 p-3 rounded border border-gray-700">
+                            <div class="text-gray-400 mb-1">人體感受預估</div>
+                            <div class="text-lg text-yellow-400">${currentWave.surf.humanRelation || '無資料'}</div>
+                        </div>
+                        <div class="bg-gray-800 p-3 rounded border border-gray-700">
+                            <div class="text-gray-400 mb-1">整體狀況</div>
+                            <div class="text-lg text-white">${currentWave.surf.optimalScore ? '👍 適合下水' : '😐 狀況普通'}</div>
+                        </div>
+                    </div>
+                `;
+            })
+            .catch(error => {
+                document.getElementById('surfline-data').innerHTML = `<div class="text-red-400">⚠️ ${error.message}</div>`;
+            });
+    </script>
+</body>
+</html>
