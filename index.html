@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NJ Surf Dashboard - Vercel 整合版</title>
+    <title>NJ Surf Dashboard - Manasquan</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-900 text-white p-6">
 
-    <h1 class="text-3xl font-bold mb-6 text-blue-400">🌊 NJ Surf Dashboard (Manasquan Vercel 測試)</h1>
+    <h1 class="text-3xl font-bold mb-6 text-blue-400">🌊 NJ Surf Dashboard (Manasquan)</h1>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        <!-- 區塊 1：即時影像 (改用 Scale 放大鏡強制裁切法) -->
+        <!-- 區塊 1：即時影像 (修復點擊與黑屏) -->
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg">
             <h2 class="text-xl font-semibold mb-3 flex items-center justify-between">
                 <span>📷 即時影像 (Manasquan Inlet)</span>
@@ -20,15 +20,15 @@
             </h2>
             
             <div id="cam-wrapper" class="relative w-full bg-black rounded overflow-hidden" style="padding-top: 56.25%;">
-                <!-- 使用 scale(1.8) 強制放大 1.8 倍，並透過 translateY 往上移來隱藏標題 -->
                 <iframe src="https://njbeachcams.com/central-new-jersey/manasquan-inlet-cam/"
-                        class="absolute border-none max-w-none"
-                        style="width: 150%; height: 600%; left: -10%; top: -65%;"
+                        class="absolute border-none"
+                        style="top: -380px; left: -20px; width: 105%; height: 1200px;"
                         scrolling="no" 
+                        allow="autoplay; fullscreen"
                         allowfullscreen>
                 </iframe>
             </div>
-            <p class="text-xs text-gray-500 mt-2">註：全螢幕後若需微調，可修改程式碼中的 scale 數值。</p>
+            <p class="text-xs text-gray-500 mt-2">載入後直接點擊畫面中央播放即可。</p>
         </div>
 
         <!-- 區塊 2：Windy -->
@@ -42,11 +42,11 @@
             </div>
         </div>
 
-        <!-- 區塊 3：Surfline (已連接你的 Vercel API) -->
+        <!-- 區塊 3：Surfline 即時數據 -->
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg lg:col-span-2">
             <h2 class="text-xl font-semibold mb-3">📊 Surfline 即時數值解析</h2>
             <div id="surfline-data" class="bg-gray-900 p-4 rounded font-mono text-sm text-green-400 min-h-[100px] flex items-center justify-center">
-                正在呼叫 Vercel 後端抓取數據...
+                正在連線後端 API 取得最新浪況...
             </div>
         </div>
 
@@ -54,50 +54,61 @@
 
     <script>
         function toggleFullScreen() {
-            const camWrapper = document.getElementById("cam-wrapper");
+            const el = document.getElementById("cam-wrapper");
             if (!document.fullscreenElement) {
-                if (camWrapper.requestFullscreen) camWrapper.requestFullscreen();
+                if (el.requestFullscreen) el.requestFullscreen();
             } else {
                 if (document.exitFullscreen) document.exitFullscreen();
             }
         }
 
-        const spotId = "5842041f4e65fad6a7708856"; 
+        const spotId = "5842041f4e65fad6a7708856";
         
-        // 這裡不再使用公共代理，而是直接呼叫我們自己的 Vercel Serverless Function
-        const apiUrl = `/api/surf?spotId=${spotId}`;
-
-        fetch(apiUrl)
-            .then(response => {
-                if (!response.ok) throw new Error("Vercel API 連線失敗");
+        fetch(`/api/surf?spotId=${spotId}`)
+            .then(async response => {
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText}`);
+                }
                 return response.json();
             })
             .then(data => {
-                const currentWave = data.data.wave[0];
+                const waveList = data?.data?.wave;
+                if (!waveList || waveList.length === 0) {
+                    throw new Error("回傳資料格式不符合預期");
+                }
+                const currentWave = waveList[0];
+                const swell = currentWave.swells?.[0] || { height: '--', period: '--', direction: '--' };
+
                 document.getElementById('surfline-data').innerHTML = `
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center w-full">
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
-                            <div class="text-gray-400 mb-1">預報浪高</div>
-                            <div class="text-2xl font-bold text-blue-400">${currentWave.surf.min} - ${currentWave.surf.max} <span class="text-sm text-gray-500">ft</span></div>
+                            <div class="text-gray-400 mb-1 text-xs">預報浪高</div>
+                            <div class="text-2xl font-bold text-blue-400">${currentWave.surf?.min ?? '-'} - ${currentWave.surf?.max ?? '-'} <span class="text-xs text-gray-400">ft</span></div>
                         </div>
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
-                            <div class="text-gray-400 mb-1">主要湧浪 (Swell)</div>
-                            <div class="text-lg text-white">${currentWave.swells[0].height}ft @ ${currentWave.swells[0].period}s</div>
-                            <div class="text-xs text-gray-500">方向: ${currentWave.swells[0].direction}°</div>
+                            <div class="text-gray-400 mb-1 text-xs">主要湧浪 (Swell)</div>
+                            <div class="text-base font-semibold text-white">${swell.height}ft @ ${swell.period}s</div>
+                            <div class="text-xs text-gray-400">方向: ${swell.direction}°</div>
                         </div>
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
-                            <div class="text-gray-400 mb-1">人體感受預估</div>
-                            <div class="text-lg text-yellow-400">${currentWave.surf.humanRelation || '無資料'}</div>
+                            <div class="text-gray-400 mb-1 text-xs">浪況評級</div>
+                            <div class="text-base font-semibold text-yellow-400">${currentWave.surf?.humanRelation || '一般'}</div>
                         </div>
                         <div class="bg-gray-800 p-3 rounded border border-gray-700">
-                            <div class="text-gray-400 mb-1">整體狀況</div>
-                            <div class="text-lg text-white">${currentWave.surf.optimalScore ? '👍 適合下水' : '😐 狀況普通'}</div>
+                            <div class="text-gray-400 mb-1 text-xs">建議狀態</div>
+                            <div class="text-base font-semibold text-white">${currentWave.surf?.optimalScore ? '適合下水' : '普通'}</div>
                         </div>
                     </div>
                 `;
             })
             .catch(error => {
-                document.getElementById('surfline-data').innerHTML = `<div class="text-red-400">⚠️ ${error.message}</div>`;
+                document.getElementById('surfline-data').innerHTML = `
+                    <div class="text-red-400 text-center">
+                        <div>⚠️ 數據載入失敗</div>
+                        <div class="text-xs text-gray-400 mt-1">${error.message}</div>
+                    </div>
+                `;
             });
     </script>
 </body>
